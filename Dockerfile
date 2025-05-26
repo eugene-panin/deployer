@@ -1,16 +1,26 @@
-FROM ubuntu:latest AS builder
+FROM alpine:3.21.3 AS builder
 
-RUN apt update
-RUN apt -y upgrade
-RUN apt -y install curl unzip
-RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.17.65.zip" -o "awscliv2.zip"
-RUN curl "https://releases.hashicorp.com/terraform/1.9.7/terraform_1.9.7_linux_amd64.zip" -o "terraform.zip"
-RUN unzip -u awscliv2.zip
-RUN unzip -u terraform.zip
-RUN ./aws/install --bin-dir /usr/local/bin --install-dir /usr/local/aws-cli --update
+ARG TERRAFORM_VERSION
+ARG TERRAGRUNT_VERSION
+ARG TARGETARCH
 
-FROM ubuntu:latest AS runtime
-COPY --from=builder /terraform /usr/local/bin/terraform
-COPY --from=builder /usr/local/aws-cli /usr/local/aws-cli
-RUN ln -sf /usr/local/aws-cli/v2/current/bin/aws /usr/local/bin/aws
-RUN ln -sf /usr/local/aws-cli/v2/current/bin/aws_completer /usr/local/bin/aws_completer
+RUN apk add --no-cache curl unzip aws-cli helm kubectl && \
+    curl -L0 "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_${TARGETARCH}.zip" -o "terraform.zip" && \
+    unzip -q terraform.zip -d /usr/local/bin && \
+    rm terraform.zip && \
+    curl -L0 "https://github.com/gruntwork-io/terragrunt/releases/download/v${TERRAGRUNT_VERSION}/terragrunt_linux_${TARGETARCH}" -o "terragrunt" && \
+    mv terragrunt /usr/local/bin/terragrunt && \
+    chmod +x /usr/local/bin/terragrunt
+
+WORKDIR /workspace
+
+# Set up non-root user
+RUN addgroup -g 1025 nonroot && \
+    adduser -D nonroot -u 1025 -G nonroot
+USER nonroot
+
+ENTRYPOINT ["/bin/sh"]
+
+LABEL org.opencontainers.image.title="Deployment Tools"
+LABEL org.opencontainers.image.description="Docker image with AWS CLI"
+LABEL org.opencontainers.image.source="https://github.com/eugene-panin/deployer"
